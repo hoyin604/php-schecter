@@ -12,9 +12,6 @@ class TreeArray {
 		'email'   => '/^[a-z0-9\_\-\.\@]{0,200}$/i',
 		// ...
 	);
-	public static $template_predefine = array(
-		'__default__' => '__empty__',
-	);
 
 	function __construct($init_array = array()) {
 		if (is_array($init_array)) {
