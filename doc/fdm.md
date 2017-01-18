@@ -75,8 +75,16 @@ we want to get a language specific string of 'Confirm' with the current selected
 - if there is no language support and also don't have key:confirm, use hardcode string 'confirm'
 
 
-Advance Tree locator:
-=====================
+introduce TreeNode locator
+--------------------------
+
+### goal
+- to due with tree like data structure like object in nested array
+- do minimize the error occur when you try to access undefined node. most of the
+  time, that piece of data are not critical and can be omit. but error display causes
+  the program stop or output broken. as a result, coder need to solve that problem
+  first. 
+
 single line syntax:
 <path> ---- <value_or_path_when_previous_path_return_default> ---- [...] .<casting_type>.<further_type_casting>
 
