@@ -1,9 +1,35 @@
-==========================
 Data and Text fundamentals
 ==========================
 
-when you need to deal with data, what fundamental things you need
-=================================================================
+what fundamental things you need for a new project?
+---------------------------------------------------
+
+programming language have basic language syntax to due with fundamental task and
+code library to fulfill additional need. since everyone may
+have different needs, some language like C will only provide very basic syntax
+and let coder to choose what they want. Other languages like javascript will
+abstracted things to make logic more understandable. PHP make lots of functions
+globally available so that you can have a handful tools which always more than
+what you need.
+
+but the truth is that, when you start a new coding project e.g. creating a website
+in PHP. you have been told to make choice among a large set of framework because
+work from scratch is unsafe and time wasting. applying framework can have a easy
+start. however, beside the learn curve of a specific framework, when the project glow up,
+the requirement changed. Original choice of framework sometimes fail. coding
+performance decreased. time to maintain code increased.
+
+how to define usefulness
+------------------------
+
+what is the problem of existing approach of framework
+-----------------------------------------------------
+
+- they are advertized to be good
+- they are too large
+- they are not for real programmer
+
+
 
 all programming language syntax to access data, but every project still need extra
 tool on it, which means language itself miss something essential.
