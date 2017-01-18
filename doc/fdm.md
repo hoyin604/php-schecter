@@ -31,22 +31,21 @@ what is the problem of existing approach of framework
 
 
 
-all programming language syntax to access data, but every project still need extra
-tool on it, which means language itself miss something essential.
 
 - e.g. tree structure is very common:
-a = {
-  title   :'Good article'
-  summary : 'Lets take a look on this good article...'
-  content :'
-    this is the content of this article and it is so great. it is about nothing. that all.
-  '
-  preview_image : {
-    'src' : '../images/prview.png'
+  ```
+  a = {
+    title   :'Good article'
+    summary : 'Lets take a look on this good article...'
+    content :'
+      this is the content of this article and it is so great. it is about nothing. that all.
+    '
+    preview_image : {
+      'src' : '../images/prview.png'
 
+    }
   }
-}
-
+  ```
 - data structure need design. once design and applied on some usage, it cannot not
 be change since it will broken the previous usage
 
