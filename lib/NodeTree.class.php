@@ -1,20 +1,25 @@
 <?php
 
-class TreeArray {
+class NodeTree {
 
 	public static $preg = array(
 		'int'     => '/^[\+\-0-9]{1,11}$/',
 		'boolean' => '/^(true|false)$/',
 		'is'      => '/^[0-1]$/',          // 0:false, 1:true
 		'key'     => '/^[a-z0-9\_]{0,255}$/i',  // key literal
+		'keyPath' => '/^[a-z0-9\_\/]{0,6000}$/i',  // path only contain key literal
 		//'keyList' => '/^[a-z\_\,]{0,6000}$/i', // keys separated by comma
 		'id'      => '/^[0-9]{1,20}$/',      // bigint numeric id
 		'email'   => '/^[a-z0-9\_\-\.\@]{0,200}$/i',
 		// ...
 	);
 
+	public static $base_fsRef = '';
+	public static $exportString = array();
+	public static $defaultNewObjectType = 'array'; // array|stdClass
+
 	function __construct($init_array = array()) {
-		if (is_array($init_array)) {
+		if (is_array($init_array) || is_object($init_array)) {
 			foreach($init_array as $p => $val) {
 				$this->{$p} = $val;
 			}
@@ -22,12 +27,31 @@ class TreeArray {
 			$this->{'__default__'} = $init_array;
 		}
 	}
+
+
 	public function geta($path, $castType_key = 'string', $default = '__default__') {
 		return self::_getaNodeVal($this, $path, $castType_key, $default);
 	}
+
+
 	public function seta($path, $val) {
 		return self::_setaNodeVal($this, $path, $val);
 	}
+
+
+	public function setaFile($path) {
+		$r = false;
+		$path = self::toSafeKeyPath($path);
+		if (self::$base_fsRef !== '' && $path !== '') {
+			$path_fsRef = self::$base_fsRef.'/'.$path.'.php';
+			if (file_exists($path_fsRef)) {
+				$r = self::_setaNodeVal($this, $path, include $path_fsRef);
+			}
+		}
+		return $r;
+	}
+
+
 	public function mergeArrayR($path, $val) {
 		$r = false;
 		if (is_array($val)) {
@@ -56,68 +80,6 @@ class TreeArray {
 
 
 
-	public static function _setaNodeVal(&$tree_array, $path, $val) {
-		// *** on support to set new node as array type
-		// *** if it try to traverse through non-collection node, false will be return
-		$r = false;
-		$curParent_node = null;
-		$node_name = '';
-		$parentNodeName_list = self::pathToNodeName_list($path);
-
-		if (count($parentNodeName_list) > 0) {
-			$curParent_node = &$tree_array;
-			$node_name = array_pop($parentNodeName_list);
-			if (count($parentNodeName_list) > 0) {
-				foreach ($parentNodeName_list as $i => $parentNode_name) {
-					if (is_array($curParent_node) && isset($curParent_node[$parentNode_name]) && (is_array($curParent_node[$parentNode_name]) || is_object($curParent_node[$parentNode_name]))) {
-						// array parent, have reference node
-						$curParent_node = &$curParent_node[$parentNode_name];
-					} elseif (is_object($curParent_node) && isset($curParent_node->{$parentNode_name}) && (is_array($curParent_node->{$parentNode_name}) || is_object($curParent_node->{$parentNode_name}))) {
-						// object parent, have reference node
-						$curParent_node = &$curParent_node->{$parentNode_name};
-					} elseif (is_array($curParent_node) && !isset($curParent_node[$parentNode_name])) {
-						// array parent, no existing node, and need to create a new one
-						$curParent_node[$parentNode_name] = array();
-						$curParent_node = &$curParent_node[$parentNode_name];
-					} elseif (is_object($curParent_node) && !isset($curParent_node->{$parentNode_name})) {
-						// object parent, no existing node, and need to create a new one
-						$curParent_node->{$parentNode_name} = array();
-						$curParent_node = &$curParent_node->{$parentNode_name};
-					} else {
-						// there already have some scalar node which conflict with the name needed
-						$curParent_node = null;
-						$node_name = '';
-						break;
-					}
-				}
-			}
-			if ($node_name != '' && !is_null($curParent_node)) {
-				if (is_object($curParent_node)) {
-					$curParent_node->{$node_name} = $val;
-					$r = true;
-				} elseif (is_array($curParent_node)) {
-					$curParent_node[$node_name] = $val;
-					$r = true;
-				}
-			}
-		} else {
-			// should replace property in root'
-			if (is_array($val) || is_object($val)) {
-				foreach($val as $k => $v) {
-					if (is_array($tree_array)) {
-						$tree_array[$k] = $v;
-					} elseif (is_object($tree_array)) {
-						$tree_array->{$k} = $v;
-					}
-				}
-				$r = true;
-			}
-		}
-		return $r;
-	}
-
-
-
 	public static function _getNode(&$tree_array, $test_path) {
 		$r = new stdClass();
 
@@ -131,6 +93,7 @@ class TreeArray {
 			// setup $valid_is and $val
 			if (is_array($val) || is_object($val)) {
 				if ((is_array($val) && isset($val[$node_name])) || (is_object($val) && isset($val->{$node_name}))) {
+					// tree node(array/object) and have key
 					$valid_is = true;
 					$path .= '/'.$node_name;
 					$level++;
@@ -146,6 +109,7 @@ class TreeArray {
 					break;
 				}
 			} else {
+				// the node is scalar value
 				$valid_is = true;
 				break;
 			}
@@ -164,10 +128,10 @@ class TreeArray {
 			// return __default__ property(if exist) when refer to the object inself
 			if ($level == 0 && $path == '' && (is_array($tree_array) || (is_object($tree_array)))) {
 				$default_key = '__default__';
-				if (is_array($tree_array) && isset($tree_array['__default_key__'])) {
-					$default_key = $tree_array['__default_key__'];
-				} elseif (is_object($tree_array) && isset($tree_array->{'__default_key__'})) {
-					$default_key = $tree_array->{'__default_key__'};
+				if (is_array($tree_array) && isset($tree_array['__defaultKey__'])) {
+					$default_key = $tree_array['__defaultKey__'];
+				} elseif (is_object($tree_array) && isset($tree_array->{'__defaultKey__'})) {
+					$default_key = $tree_array->{'__defaultKey__'};
 				}
 
 				if (is_array($tree_array) && isset($tree_array[$default_key])) {
@@ -190,6 +154,94 @@ class TreeArray {
 	}
 
 
+
+
+	public static function _setaNodeVal(&$tree_array, $path, $val) {
+		// *** on support to set new node as array type
+		// *** if it try to traverse through non-collection node, false will be return
+		$r = false;
+		if (self::node_is($tree_array)) {
+			$curParent_node = &$tree_array;
+			$nodeName_list = self::pathToNodeName_list($path);
+			if (count($nodeName_list) > 0) { // it should at least have one level
+				foreach ($nodeName_list as $i => $key) {
+					if ($i == count($nodeName_list) -1) {
+						// the last key
+						$r = self::setNodeByKey($curParent_node, $key, $val);
+					} else {
+						$ref = self::traverseNode($curParent_node, $key);
+						if ($ref === false) {
+							break;
+						} else {
+							$curParent_node = &$ref;
+						}
+					}
+				}
+			}
+		}
+		return $r;
+	}
+
+	public static function traverseNode(&$node, $key) {
+		$r = false;
+		if (self::node_is($node)) {
+			// create new
+			if (is_object($node) && !isset($node->{$key})) {
+				if (self::$defaultNewObjectType == 'array') {
+					$node->{$key} = array();
+				} elseif (self::$defaultNewObjectType == 'stdClass') {
+					$node->{$key} = new stdClass();
+				}
+			} elseif (is_array($node) && !isset($node[$key])) {
+				if (self::$defaultNewObjectType == 'array') {
+					$node[$key] = array();
+				} elseif (self::$defaultNewObjectType == 'stdClass') {
+					$node[$key] = new stdClass();
+				}
+			}
+			if (self::node_is($node, $key)) {
+				// successful traverse
+				if (is_object($node) && isset($node->{$key})) {
+					$r = &$node->{$key};
+				} elseif (is_array($node) && isset($node[$key])) {
+					$r = &$node[$key];
+				}
+			} else {
+				break;
+			}
+		}
+		return $r;
+	}
+
+	public static function setNodeByKey(&$node, $key, $val) {
+		$r = false;
+		if (self::node_is($node) && $key != '' && preg_match(self::$preg['key'], $key)) {
+			if (is_object($node)) {
+				$node->{$key} = $val;
+				$r = true;
+			} elseif (is_array($node)) {
+				$node[$key] = $val;
+				$r = true;
+			}
+		}
+		return $r;
+	}
+
+	public static function node_is(&$node, $key = '') {
+		$r = false;
+		if ($key == '') {
+			$r = (!is_scalar($node) && !is_null($node) && (is_object($node) || is_array($node)))?true:false;
+		} elseif (preg_match(self::$preg['key'], $key)) {
+			if (self::node_is($node)) {
+				if (is_object($node) && isset($node->{$key})) {
+					$r = self::node_is($node->{$key});
+				} elseif (is_array($node) && isset($node[$key])) {
+					$r = self::node_is($node[$key]);
+				}
+			}
+		}
+		return $r;
+	}
 
 	public static function toCastType($node, $castType_key = 'string', $default = '__default__') {
 
@@ -235,10 +287,26 @@ class TreeArray {
 
 
 	public static function pathToNodeName_list($path) {
-		$path = preg_replace('/\/{2,}/i', '/', $path);
-		$path = preg_replace('/^\//i', '', $path);
-		$path = preg_replace('/\/$/i', '', $path);
-		return ($path != '')?explode("/", $path):array();
+		$r = array();
+		$path = self::toSafeKeyPath($path);
+		if ($path != '') {
+			$r = explode("/", $path);
+		}
+		return $r;
+	}
+
+
+
+
+	public static function toSafeKeyPath($path) {
+		$r = '';
+		$path = preg_replace('/\/{2,}/i', '/', $path); // replace double // to signle /
+		$path = preg_replace('/^\//i', '', $path);     // any path start by / should be remove
+		$path = preg_replace('/\/$/i', '', $path);     // any path ended with / should be remove
+		if ($path != '' && isset(self::$preg['keyPath']) && preg_match(self::$preg['keyPath'], $path)) {
+			$r = $path;
+		}
+		return $r;
 	}
 
 
