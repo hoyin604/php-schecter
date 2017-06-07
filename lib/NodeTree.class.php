@@ -7,7 +7,7 @@ class NodeTree {
 		'boolean' => '/^(true|false)$/',
 		'is'      => '/^[0-1]$/',          // 0:false, 1:true
 		'key'     => '/^[a-z0-9\_]{0,255}$/i',  // key literal
-		'path' => '/^[a-z0-9\_\/]{0,6000}$/i',  // path only contain key literal and cannot have dot
+		'path' => '/^[a-z0-9\_\-\/]{0,2000}$/i',  // path only contain key literal, hyphen and cannot have dot
 		//'keyList' => '/^[a-z\_\,]{0,6000}$/i', // keys separated by comma
 		'id'      => '/^[0-9]{1,20}$/',      // bigint numeric id
 		'email'   => '/^[a-z0-9\_\-\.\@]{0,200}$/i',
@@ -460,6 +460,8 @@ class NodeTree {
 		$path = preg_replace('/^\//i', '', $path);     // any path start by / should be remove
 		$path = preg_replace('/\/$/i', '', $path);     // any path ended with / should be remove
 		if ($path != '' && isset(self::$preg['path']) && preg_match(self::$preg['path'], $path)) {
+			//$r = strtolower(preg_replace('/\-/i', '_', $path)); // convert - to _ and all lower case
+			//$r = strtolower($path); // convert to all lower case
 			$r = $path;
 		}
 		return $r;
