@@ -7,7 +7,7 @@ class NodeTree {
 		'boolean' => '/^(true|false)$/',
 		'is'      => '/^[0-1]$/',          // 0:false, 1:true
 		'key'     => '/^[a-z0-9\_]{0,255}$/i',  // key literal
-		'path' => '/^[a-z0-9\_\-\/]{0,2000}$/i',  // path only contain key literal, hyphen and cannot have dot
+		'path' => '/^[a-z0-9\_\/]{0,6000}$/i',  // path only contain key literal and cannot have dot
 		//'keyList' => '/^[a-z\_\,]{0,6000}$/i', // keys separated by comma
 		'id'      => '/^[0-9]{1,20}$/',      // bigint numeric id
 		'email'   => '/^[a-z0-9\_\-\.\@]{0,200}$/i',
@@ -29,16 +29,15 @@ class NodeTree {
 	}
 
 
-	public function geta($path, $castType_key = 'string', $default = '__default__') {
-		return self::_getaNodeVal($this, $path, $castType_key, $default);
+	public function geta($path, $castType_key = 'string', $default = '__default__', $minMatchLevel = 0) {
+		return self::_getaNodeVal($this, $path, $castType_key, $default, $minMatchLevel);
 	}
-
 
 	public function seta($path, $val) {
 		return self::_setaNodeVal($this, $path, $val);
 	}
 
-	public function setaIfPathUndefined($path, $val, $emptyAsUndefined_is = true) {
+	public function setaIfPathUndefined($path, $val, $emptyAsUndefined_is = true) { // array() 0,'' treat as empty
 		$node = self::_getNode($this, $path);
 		if (!$node->exist_is || ($emptyAsUndefined_is && $node->exist_is && empty($node->val))) {
 			return self::_setaNodeVal($this, $path, $val);
@@ -46,11 +45,11 @@ class NodeTree {
 		return false;
 	}
 	public function setaIfValNotDefault($path, $val, $emptyAsDefault_is = true) {
-		$node = self::_getNode($this, $path);
+		$r = false;
 		if (!($val === '__default__' || ($emptyAsDefault_is && $val === ''))) {
-			return self::_setaNodeVal($this, $path, $val);
+			$r = self::_setaNodeVal($this, $path, $val);
 		}
-		return false;
+		return $r;
 	}
 
 	public function setaFile($path) {
@@ -84,12 +83,12 @@ class NodeTree {
 
 
 	// static
-	public static function _getaNodeVal($tree_array, $path, $castType_key = 'string', $default = '__default__') {
+	public static function _getaNodeVal($tree_array, $path, $castType_key = 'string', $default = '__default__', $minMatchLevel = 0) {
 		// $dataType: boolean|integer|double|string|array|object|resource|NULL
 		// extend type:
 		//   string: key|html|email|...
 		//   number: count|...
-		$node = self::_getNode($tree_array, $path);
+		$node = self::_getNode($tree_array, $path, $minMatchLevel);
 		if ($node->exist_is) {
 			if ($castType_key != '__noCasting__') {
 				$default = self::toCastType($node->val, $castType_key, $default);
@@ -103,7 +102,7 @@ class NodeTree {
 
 
 
-	public static function _getNode(&$tree_array, $test_path) {
+	public static function _getNode($tree_array, $test_path, $minMatchLevel = 0) {
 		/* $test_path e.g.
 			`/`                 : the $tree_array inself
 			`title` or `/title` : key name `title` in array or property name `title` in object
@@ -113,12 +112,22 @@ class NodeTree {
 		$exist_is = true;
 		$level = 0;
 		$path = '';
-		$val = $tree_array;
+		$__default__ = '__default__';
+		$__defaultKey__ = '__default__';
+		$val = &$tree_array;
 		$node_list = self::pathToNodeName_list($test_path);
+		$maxLevel = count($node_list);
 
 		foreach($node_list as $i => $node_name) {
-			// setup $exist_is and $val
 			if (is_array($val) || is_object($val)) {
+				// setup __default__ and __defaultKey__
+				if (is_array($val)) {
+					if (isset($val['__default__'])) $__default__ = $val['__default__'];
+					if (isset($val['__defaultKey__'])) $__defaultKey__ = $val['__defaultKey__'];
+				} elseif (is_object($val)) {
+					if (isset($val->{'__default__'})) $__default__ = $val->{'__default__'};
+					if (isset($val->{'__defaultKey__'})) $__defaultKey__ = $val->{'__defaultKey__'};
+				}
 				if ((is_array($val) && isset($val[$node_name])) || (is_object($val) && isset($val->{$node_name}))) {
 					// tree node(array/object) and have key
 					$exist_is = true;
@@ -131,36 +140,41 @@ class NodeTree {
 					}
 				} else {
 					// dont have those key in array/object
-					$exist_is = false;
-					$val = '';
+					if ($minMatchLevel == 0 || ($minMatchLevel > 0 && $level < $minMatchLevel) || ($minMatchLevel < 0 && $level < ($maxLevel + $minMatchLevel))) {
+						$exist_is = false;
+						$val = '';
+					}
 					break;
 				}
 			} else {
 				// the node is scalar value
-				$exist_is = true;
+				if ($minMatchLevel == 0 || ($minMatchLevel > 0 && $level < $minMatchLevel) || ($minMatchLevel < 0 && $level < ($maxLevel + $minMatchLevel))) {
+					$exist_is = false;
+					$val = '';
+				} else {
+					$exist_is = true;
+				}
 				break;
 			}
 		}
-		if ($level < count($node_list)) {
-			// cannot reach the distinate node
-			$exist_is = false;
-		}
 
 		$r->exist_is = $exist_is;
-		if ($exist_is) {
-			$r->type = gettype($val);
-			if ($r->type == 'array' && self::is_assoArray($val)) {
-				$r->type = 'assoArray';
-			}
-			$r->level = $level;
-			$r->path = $path;
-			$r->val = $val;
-		} else {
-			$r->type ='';
-			$r->level = 0;
-			$r->path = '';
-			$r->val = '';
+		$r->type = gettype($val);
+		if ($r->type == 'array' && self::is_assoArray($val)) {
+			$r->type = 'assoArray';
+		} elseif (!$exist_is) {
+			$r->type = '';
+			$val = '';
 		}
+
+		if ($r->type == 'assoArray' || $r->type == 'object') {
+			if ($__default__ != '__default__') self::setNodeByKey($val, '__default__', $__default__);
+			if ($__defaultKey__ != '__default__') self::setNodeByKey($val, '__defaultKey__', $__defaultKey__);
+		}
+		$r->level = $level;
+		$r->path = $path;
+		$r->val = $val;
+
 		return $r;
 	}
 
@@ -172,7 +186,7 @@ class NodeTree {
 		if (self::node_is($tree_array)) {
 			$curParent_node = &$tree_array;
 			$nodeName_list = self::pathToNodeName_list($path);
-			if (count($nodeName_list) > 0) { // it should at least have one level
+			if (count($nodeName_list) > 0 && $nodeName_list[0] != '__invalid__') { // it should at least have one level
 				foreach ($nodeName_list as $i => $key) {
 					if ($i == count($nodeName_list) -1) {
 						// the last key
@@ -215,6 +229,18 @@ class NodeTree {
 				} elseif (is_array($node) && isset($node[$key])) {
 					$r = &$node[$key];
 				}
+			}
+		}
+		return $r;
+	}
+
+	public static function &getNodeByKey(&$node, $key, $default = '__default__') {
+		$r = $default;
+		if (preg_match(self::$preg['key'], $key) && self::node_is($node)) {
+			if (is_object($node) && isset($node->{$key})) {
+				$r = &$node->{$key};
+			} elseif (is_array($node) && isset($node[$key])) {
+				$r = &$node[$key];
 			}
 		}
 		return $r;
@@ -459,10 +485,12 @@ class NodeTree {
 		$path = preg_replace('/\/{2,}/i', '/', $path); // replace double // to signle /
 		$path = preg_replace('/^\//i', '', $path);     // any path start by / should be remove
 		$path = preg_replace('/\/$/i', '', $path);     // any path ended with / should be remove
-		if ($path != '' && isset(self::$preg['path']) && preg_match(self::$preg['path'], $path)) {
-			//$r = strtolower(preg_replace('/\-/i', '_', $path)); // convert - to _ and all lower case
-			//$r = strtolower($path); // convert to all lower case
-			$r = $path;
+		if ($path != '') {
+			if (isset(self::$preg['path']) && preg_match(self::$preg['path'], $path)) {
+				$r = $path;
+			} else {
+				$r = '__invalid__';
+			}
 		}
 		return $r;
 	}

@@ -11,43 +11,17 @@ function init_m($param = array()) {
 			'param' => array(
 				'appName' => array(
 					'__default__' => 'defaultApp',
-					'type' => 'string', // string|integer
+					'type' => 'key',
 					'accept_preg' => '/^(defaultApp){0,255}$/',
 					'searchRequest_is' => true,
 					'searchUrl_is' => true,
-					'inOrder_is' => true,
 				),
 				'finalType' => array(
 					'__default__' => 'html',
-					'type' => 'string', // string|integer
+					'type' => 'key',
 					'accept_preg' => '/^(html){0,255}$/',
 					'searchRequest_is' => true,
 					'searchUrl_is' => true,
-					'inOrder_is' => false,
-				),
-				'controller_app_is' => array(
-					'__default__' => 1,
-					'type' => 'integer', // string|integer
-					'accept_preg' => '/^(0|1){0,1}$/',
-					'searchRequest_is' => false,
-					'searchUrl_is' => false,
-					'inOrder_is' => false,
-				),
-				'controller_type_is' => array(
-					'__default__' => 1,
-					'type' => 'integer', // string|integer
-					'accept_preg' => '/^(0|1){0,1}$/',
-					'searchRequest_is' => false,
-					'searchUrl_is' => false,
-					'inOrder_is' => false,
-				),
-				'controller_loc_is' => array(
-					'__default__' => 1,
-					'type' => 'integer', // string|integer
-					'accept_preg' => '/^(0|1){0,1}$/',
-					'searchRequest_is' => false,
-					'searchUrl_is' => false,
-					'inOrder_is' => false,
 				),
 			)
 		));
@@ -65,13 +39,12 @@ function init_m($param = array()) {
 
 		psch__processParam();
 
-		// controller : path should be tested before setup
-		// setup app controller path
+		// get the appName finally and setup app controller path
 		$appName = $m->geta('param/appName', 'key');
 		$appRoot_fsRef = $projectRoot_fsRef;
 		$controller = '__notFound__';
-		$test_path1 = $projectRoot_fsRef.'/'.$appName.'/__default__.php'; // folder base app
-		$test_path2 = $projectRoot_fsRef.'/'.$appName.'.php'; // single file app
+		$test_path1 = $projectRoot_fsRef.'/'.$appName.'/__default__.php';
+		$test_path2 = $projectRoot_fsRef.'/'.$appName.'.php';
 		if (is_file($test_path1)) {
 			$appRoot_fsRef = $projectRoot_fsRef.'/'.$appName;
 			$controller = '__default__';
@@ -96,44 +69,41 @@ function init_m($param = array()) {
 		$m->seta('controller/type', $controller);
 
 		// setup loc controller
-		$controller_loc_is = $m->geta('param/controller_loc_is', 'boolean', true);
-		if ($controller_loc_is) {
-			$locRoot_fsRef = $appRoot_fsRef;
-			$remainNode_keyList = $m->geta('request/remainNode_keyList', 'array', array());
-			$controller = 'index';
-			if (is_file($appRoot_fsRef.'/loc/index.php')) {
-				$locRoot_fsRef = $appRoot_fsRef.'/loc';
+		$remainNode_keyList = $m->geta('request/remainNode_keyList', 'array', array());
+		$locRoot_fsRef = $appRoot_fsRef;
+		$controller = 'index';
+		if (is_file($appRoot_fsRef.'/loc/index.php')) {
+			$locRoot_fsRef = $appRoot_fsRef.'/loc';
+		}
+		$c = '';
+		$lastDir_is = false;
+		foreach ($remainNode_keyList as $i => $pathNode_name) {
+			$t = $c.(($i>0)?'/':'').$pathNode_name;
+			$file_is = is_file($locRoot_fsRef.'/'.$t.'.php');
+			$dir_is  = is_file($locRoot_fsRef.'/'.$t.'/index.php');
+			if ($file_is) {
+				$c = $t;
+				break;
+			} elseif ($dir_is) {
+				$c = $t;
+				$lastDir_is = $dir_is;
+			} else {
+				break;
 			}
-			$c = '';
-			$lastDir_is = false;
-			foreach ($remainNode_keyList as $i => $pathNode_name) {
-				$t = $c.(($i>0)?'/':'').$pathNode_name;
-				$file_is = is_file($locRoot_fsRef.'/'.$t.'.php');
-				$dir_is  = is_file($locRoot_fsRef.'/'.$t.'/index.php');
-				if ($file_is) {
-					$c = $t;
-					break;
-				} elseif ($dir_is) {
-					$c = $t;
-					$lastDir_is = $dir_is;
-				} else {
-					break;
-				}
-			}
-			if ($c !== '') {
-				$controller = $c;
-				if ($dir_is || ($lastDir_is && !$file_is && !$dir_is)) $controller .= '/index';
-			}
-			$m->seta('controller/loc', $controller);
-			if ($c !== '') {
-				if (!$file_is && !$dir_is) {
-					// the last one is incorrect node
-					$m->seta('request/remainNode_keyList', array_slice($remainNode_keyList, $i, count($remainNode_keyList) - $i));
-				} elseif ($file_is && $i < count($remainNode_keyList)-1) {
-					$m->seta('request/remainNode_keyList', array_slice($remainNode_keyList, $i+1, count($remainNode_keyList) - $i - 1));
-				} else {
-					$m->seta('request/remainNode_keyList', array());
-				}
+		}
+		if ($c !== '') {
+			$controller = $c;
+			if ($dir_is || ($lastDir_is && !$file_is && !$dir_is)) $controller .= '/index';
+		}
+		$m->seta('controller/loc', $controller);
+		if ($c !== '') {
+			if (!$file_is && !$dir_is) {
+				// the last one is incorrect node
+				$m->seta('request/remainNode_keyList', array_slice($remainNode_keyList, $i, count($remainNode_keyList) - $i));
+			} elseif ($file_is && $i < count($remainNode_keyList)-1) {
+				$m->seta('request/remainNode_keyList', array_slice($remainNode_keyList, $i+1, count($remainNode_keyList) - $i - 1));
+			} else {
+				$m->seta('request/remainNode_keyList', array());
 			}
 		}
 
@@ -157,7 +127,7 @@ function psch__getController($type = '') {
 		$root_fsRef = $locRoot_fsRef;
 	}
 
-	$test_path = $root_fsRef.'/'.$m->geta('controller/'.$type, 'path', '__notFound__').'.php';
+	$test_path = $root_fsRef.'/'.$m->geta('controller/'.$type, 'path').'.php';
 	if (is_file($test_path)) {
 		$r = $test_path;
 	}
@@ -213,14 +183,7 @@ function psch__processParam($param_name = '') {
 
 function psch__safeLocalPHPFile($fsBase_type, $path) {
 	// $fsBase_type : projectRoot|appRoot|typeRoot|locRoot
-	// $path should be under one of above 4 locations
-	//   projectRoot : the top-most folder for the project
-	//   appRoot     : the root folder of current application controller
-	//   typeRoot    : the root folder for the controllers of current output formats
-	//   locRoot     : the root folder for the controllers base on url path
-	// characters in $path have restriction which only allow a-z, 0-9, dot, hyphen and underscore
-	// any ../ will be remove
-	// .php should omitted from the path
+	// filename in $path have restriction which only allow a-z, 0-9, dot, hyphen and underscore, .php omitted
 
 	global $projectRoot_fsRef;
 
@@ -295,6 +258,48 @@ function psch_stringIfNotEmpty_is(&$str_var) {
 		return false;
 	}
 }
+
+// add/change parameters in existing url
+function psch_urlAddParam($url, $addParam_list = array()) {
+	$r = $url;
+	if (is_array($addParam_list) && count($addParam_list) > 0) {
+		$url_obj = parse_url($url);
+		if ($url_obj !== false && is_array($url_obj)) {
+			$r = '';
+			if (isset($url_obj['scheme'])) {
+				$r .= $url_obj['scheme']."//";
+			}
+			if (isset($url_obj['user']) && isset($url_obj['pass'])) {
+				$r .= $url_obj['user'].':'.$url_obj['pass'].'@';
+			}
+			if (isset($url_obj['host'])) {
+				$r .= $url_obj['host'];
+			}
+			if (isset($url_obj['port'])) {
+				$r .= ':'.$url_obj['port'];
+			}
+			if (isset($url_obj['path'])) {
+				$r .= $url_obj['path'];
+			}
+			$param_list = array();
+			if (isset($url_obj['query'])) {
+				parse_str($url_obj['query'], $param_list);
+			}
+			foreach ($addParam_list as $param_name => $param_val) {
+				$param_list[$param_name] = $param_val;
+			}
+			$newQueryStr = http_build_query($param_list);
+			if ($newQueryStr != '') {
+				$r .= '?'.$newQueryStr;
+			}
+			if (isset($url_obj['fragment'])) {
+				$r .= '#'.$url_obj['fragment'];
+			}
+		}
+	}
+	return $r;
+}
+
 
 
 ?>
